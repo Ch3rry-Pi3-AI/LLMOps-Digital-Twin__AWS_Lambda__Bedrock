@@ -2,7 +2,7 @@
 
 This branch focuses on running and testing the **llmops-digital-twin** application locally. At this stage, the backend does not yet include memory, so each message is processed independently. The goal is simply to verify that the backend and frontend communicate correctly, and to observe the limitation that the Digital Twin cannot remember anything yet.
 
-## part 1: start the backend server
+## Part 1: start the backend server
 
 ### Step 1: Launch the backend
 
@@ -32,7 +32,7 @@ Click the URL. Your browser will show:
 
 This confirms the backend API is running correctly.
 
-## part 2: start the frontend interface
+## Part 2: start the frontend interface
 
 ### Step 2: Launch the frontend development server
 
@@ -62,7 +62,7 @@ You will see your Digital Twin interface:
 
 <img src="img/testing/app_chatbot.png" width="100%" />
 
-## part 3: observe the memory limitation
+## Part 3: observe the memory limitation
 
 Try the following simple test conversation:
 
