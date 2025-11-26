@@ -22,7 +22,7 @@ Inside the `twin` folder:
 Your structure should now be:
 
 ```
-twin/
+llmops-digital-twin/
 ├── backend/
 └── memory/
 ```
@@ -58,7 +58,7 @@ Inside Cursor:
 Your project structure now becomes:
 
 ```
-twin/
+llmops-digital-twin/
 ├── backend/
 ├── frontend/
 │   ├── app/
