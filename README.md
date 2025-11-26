@@ -1,103 +1,84 @@
-# 🚀 **Project Setup — Branch Overview**
+# 🧠 **Backend API — Branch Overview**
 
-This branch prepares the core structure for the **LLMOps Digital Twin** project. The focus is on creating the initial directory layout, generating the Next.js frontend without nested Git issues, and installing a modern Python package manager for backend development.
+This branch introduces the backend layer for the **llmops-digital-twin** project. The focus is on creating the initial FastAPI service, defining configuration files, setting up the Digital Twin personality file, and preparing a clean API endpoint that the frontend will communicate with. Memory is not implemented at this stage and will be added in a later branch.
 
-## Part 1: Create the Core Project Structure
+## Part 1: Create the Backend Files
 
-### Step 1: Open Your Workspace
+### Step 1: Create the Requirements File
 
-1. Open **Cursor** (or your preferred IDE).
-2. Select **File → Open Folder**.
-3. Create a new folder named `twin`.
-4. Open the `twin` folder in Cursor.
+Create `backend/requirements.txt`:
 
-### Step 2: Create Required Directories
+```
+fastapi
+uvicorn
+openai
+python-dotenv
+python-multipart
+```
 
-Inside the `twin` folder:
+These dependencies allow the backend to run a FastAPI server, load environment variables, interact with OpenAI models, and handle incoming requests from the frontend.
 
-1. Right-click in the file explorer.
-2. Select **New Folder** → name it `backend`.
-3. Right-click again → **New Folder** → name it `memory`.
+### Step 2: Add Environment Configuration
 
-Your structure should now be:
+Create `backend/.env`:
+
+```
+OPENAI_API_KEY=your_openai_api_key_here
+CORS_ORIGINS=http://localhost:3000
+```
+
+Replace `your_openai_api_key_here` with your real API key.
+
+This file stores sensitive configuration values and should not be committed to Git. To protect it, ensure the project root contains a `.gitignore` file with:
+
+```
+.env
+```
+
+This keeps your secrets safe while working across branches.
+
+### Step 3: Add the Digital Twin Personality File
+
+Create `backend/me.txt` with a description of who your Digital Twin represents.
+
+This file acts as the system prompt. Its contents shape how the model responds on your behalf. Every chat request loads this personality text and uses it to generate replies that reflect your tone, background, and expertise.
+
+Example structure:
+
+```
+You are a chatbot acting as a "Digital Twin", representing Roger J. Campbell...
+
+(your personality content here)
+```
+
+The final version is customised to your educational background, AI/ML consulting work, interests, and tone.
+
+### Step 4: Build the FastAPI Server
+
+Create `backend/server.py` containing the backend API logic.
+
+This file:
+
+* Loads environment variables
+* Configures CORS for safe communication with the frontend
+* Loads the Digital Twin personality from `me.txt`
+* Defines request and response models
+* Provides `/`, `/health`, and `/chat` endpoints
+* Sends user messages to OpenAI and returns the model’s response
+
+The `/chat` endpoint currently **does not include memory**. Each request is processed independently. A session ID is generated so that memory can be added seamlessly in a later branch.
+
+## Part 2: Backend Structure After This Branch
+
+Your backend now looks like:
 
 ```
 llmops-digital-twin/
 ├── backend/
-└── memory/
+│   ├── .env
+│   ├── me.txt
+│   ├── requirements.txt
+│   └── server.py
 ```
 
-### Step 3: Create the Frontend Application
-
-Open a terminal inside Cursor:
-
-```bash
-npx create-next-app@latest frontend --typescript --tailwind --app --no-src-dir --no-git
-```
-
-This command creates a Next.js 14+ app using:
-
-* TypeScript
-* TailwindCSS
-* The App Router
-* A clean root folder (no `src/`)
-* **No Git initialisation**, preventing accidental nested repos
-
-Accept all defaults when prompted.
-
-Once completed, you will see output indicating that dependencies and route types were installed successfully.
-
-### Step 4: Add the Components Directory
-
-Inside Cursor:
-
-1. Expand the `frontend` directory.
-2. Right-click on it.
-3. Select **New Folder** → name it `components`.
-
-Your project structure now becomes:
-
-```
-llmops-digital-twin/
-├── backend/
-├── frontend/
-│   ├── app/
-│   ├── components/
-│   ├── public/
-│   └── (config files: package.json, next.config.js, tsconfig.json, etc.)
-└── memory/
-```
-
-## Part 2: Install the Python Package Manager (uv)
-
-The Digital Twin backend uses **uv**, a modern and extremely fast Python toolchain. It replaces pip and venv with a unified, efficient workflow.
-
-### Step 1: Install uv
-
-#### macOS / Linux
-
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
-
-#### Windows (PowerShell)
-
-```powershell
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-```
-
-After installation, restart the terminal and confirm uv is available:
-
-```bash
-uv --version
-```
-
-You should see output similar to:
-
-```
-uv 0.x.x
-```
-
-### Step 2: Confirm Installation Is Working
-
-If `uv --version` returns a valid version number, the setup is complete and you can proceed to backend environment configuration in the next branch.
+This backend is now prepared to receive messages from the frontend and respond as your Digital Twin. Memory, retrieval, history tracking, and advanced features will be built in upcoming branches.
