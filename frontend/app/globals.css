@@ -2,26 +2,76 @@
  * Global stylesheet for the frontend.
  *
  * This file:
- * - Imports TailwindCSS utility classes
- * - Defines a custom bounce animation used for the typing indicator
- * - Adds utility classes for animation delay variations
- *
- * These styles enhance the UI animations while keeping the rest of the styling
- * handled by Tailwind’s utility-first approach.
+ * - Imports TailwindCSS utility layers
+ * - Adds Markdown-friendly styling via `.markdown-content`
+ * - Keeps your custom bounce animation for the typing indicator
  */
 
 /* Import core TailwindCSS layers (base, components, utilities) */
 @import 'tailwindcss';
 
+/* --------------------------------------- */
+/* Markdown Content Styling                 */
+/* --------------------------------------- */
+
+@layer base {
+  /* Ensure markdown content isn't artificially constrained */
+  .markdown-content {
+    max-width: none;
+  }
+
+  .markdown-content h1 {
+    @apply text-2xl font-bold mt-3 mb-2;
+  }
+
+  .markdown-content h2 {
+    @apply text-xl font-semibold mt-3 mb-2;
+  }
+
+  .markdown-content h3 {
+    @apply text-lg font-semibold mt-2 mb-1;
+  }
+
+  .markdown-content p {
+    @apply my-2;
+  }
+
+  .markdown-content ul {
+    @apply list-disc pl-6 my-2;
+  }
+
+  .markdown-content ol {
+    @apply list-decimal pl-6 my-2;
+  }
+
+  .markdown-content li {
+    @apply my-1;
+  }
+
+  .markdown-content strong {
+    @apply font-bold;
+  }
+
+  .markdown-content em {
+    @apply italic;
+  }
+
+  .markdown-content code {
+    @apply bg-slate-100 px-1 py-0.5 rounded text-sm font-mono;
+  }
+}
+
+/* --------------------------------------- */
+/* Bounce Animation (typing indicator)      */
+/* --------------------------------------- */
+
 /* Smooth vertical bounce animation used by the loading dots */
 @keyframes bounce {
-  0%,
-  80%,
-  100% {
+  0%, 80%, 100% {
     transform: translateY(0);
   }
   40% {
-    transform: translateY(-10px); /* Slight upward movement for the bounce */
+    transform: translateY(-10px);
   }
 }
 
