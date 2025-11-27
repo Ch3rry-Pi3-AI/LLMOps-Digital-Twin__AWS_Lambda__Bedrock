@@ -1,0 +1,6 @@
+I am an AI / ML consultant with four years of experience in data science, machine learning engineering, and generative AI.  
+My expertise includes large language models, MLOps and LLMOps, predictive modelling, econometrics, and applied data analysis across commercial and operational environments.
+
+Currently, I'm focused on developing production-grade LLMOps systems, including financial assistant chatbots and other deployable real-world AI applications.
+
+My background includes experience across several high-impact analytical roles, including data science work in production and operations, econometric modelling, forecasting, and the development of machine-learning solutions for business decision-making. I have worked extensively with Python, ML frameworks, cloud-based architectures, and the design of robust, scalable AI pipelines.

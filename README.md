@@ -1,88 +1,104 @@
-# 🧪 **Testing the Digital Twin (No Memory) — Branch Overview**
+# 🧠 **Adding Memory to Your Digital Twin — Branch Overview**
 
-This branch focuses on running and testing the **llmops-digital-twin** application locally. At this stage, the backend does not yet include memory, so each message is processed independently. The goal is simply to verify that the backend and frontend communicate correctly, and to observe the limitation that the Digital Twin cannot remember anything yet.
+This branch upgrades the **llmops-digital-twin** backend to support **persistent conversational memory**. Your Digital Twin can now recall previous messages within a session, enabling natural, context-aware dialogue. Memory is stored as JSON files in the `/memory` directory, allowing each session to maintain its own conversation history.
 
-## Part 1: start the backend server
+## part 1: update the backend with memory support
 
-### Step 1: Launch the backend
+### Step 1: Replace `server.py` with the memory-enabled version
 
-Open a new terminal in Cursor:
+In this branch, the backend is enhanced to include:
+
+* a per-session memory system
+* JSON storage under `../memory/`
+* automatic session creation
+* loading previous messages before each new request
+* storing updated conversations after each assistant reply
+* a `/sessions` endpoint for inspecting all active sessions
+
+Replace your existing `backend/server.py` with the new memory-enabled version provided for this branch.
+
+This update allows your Digital Twin to remember user-provided details (such as their name, preferences, or project details) across multiple messages within the same session.
+
+## part 2: restart the backend server
+
+After replacing `server.py`, restart the backend:
 
 ```bash
 cd backend
 uv run uvicorn server:app --reload
 ```
 
-You should see something like:
+You should see the usual FastAPI startup logs indicating that the server is running on:
 
 ```
-INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
-INFO:     Started reloader process [...]
-INFO:     Started server process [...]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-INFO:     127.0.0.1 - "GET / HTTP/1.1" 200 OK
+http://127.0.0.1:8000
 ```
 
-Click the URL. Your browser will show:
+The backend is now ready to support full memory-based conversations.
 
-```
-{"message":"AI Digital Twin API"}
-```
+## part 3: test memory persistence in your Digital Twin
 
-This confirms the backend API is running correctly.
+### Step 1: Open the app
 
-## Part 2: start the frontend interface
-
-### Step 2: Launch the frontend development server
-
-Open another new terminal:
-
-```bash
-cd frontend
-npm run dev
-```
-
-You should see output similar to:
-
-```
-▲ Next.js 16.x (Turbopack)
-- Local:   http://localhost:3000
-- Network: http://192.168.x.x:3000
-✓ Ready in 1.2s
-```
-
-Now open the app:
+Visit:
 
 ```
 http://localhost:3000
 ```
 
-You will see your Digital Twin interface:
+### Step 2: Have a memory test conversation
 
-<img src="img/testing/app_chatbot.png" width="100%" />
+Try the following messages:
 
-## Part 3: observe the memory limitation
+1. **you:** “Hi! My name is Fred and I love Python.”
+2. **twin:** responds with greeting and acknowledges your preferences
+3. **you:** “What’s my name and what do I love?”
+4. **twin:** correctly remembers:
 
-Try the following simple test conversation:
+   * your name is Fred
+   * you love Python
 
-1. Go to `http://localhost:3000`
-2. Interact with the Digital Twin:
+Your interface should look similar to:
 
-   * **you:** “Hi! My name is Alex”
-   * **twin:** greets you normally
-   * **you:** “What’s my name?”
-   * **twin:** does **not** remember it
+<img src="img/testing/chat_remember.png" width="100%" />
 
-<img src="img/testing/chat_forget.png" width="100%" />
+### Step 3: Inspect the memory files
 
-This is expected behaviour.
-Your backend currently processes every message independently:
+Open a terminal and check the memory directory:
 
-* no stored conversation state
-* no awareness of previous messages
-* system prompt + single user message only
+```bash
+ls ../memory/
+```
 
-This stage exists specifically to demonstrate that **memory is missing** and must be implemented manually in the next branch.
+You will see files such as:
 
-Your backend and frontend are now fully connected and functioning, and you are ready to add memory support next.
+```
+c12a55d8-8f23-41af-a81f-fbb3b6f6ed3e.json
+```
+
+Each file represents one session and contains the full conversation history:
+
+```json
+[
+  {
+    "role": "user",
+    "content": "Hi! My name is Fred and I love Python"
+  },
+  {
+    "role": "assistant",
+    "content": "Hi, Fred! It's great to meet you..."
+  },
+  {
+    "role": "user",
+    "content": "What's my name and what do I love?"
+  },
+  {
+    "role": "assistant",
+    "content": "You mentioned that your name is Fred and you love Python..."
+  }
+]
+```
+
+This JSON file-based memory system now enables your Digital Twin to maintain session context and support natural multi-turn conversations.
+
+Your backend now fully supports memory, completing a major milestone in developing your Digital Twin.

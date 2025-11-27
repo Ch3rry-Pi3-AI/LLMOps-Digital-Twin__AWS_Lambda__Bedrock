@@ -1,0 +1,40 @@
+{
+  "full_name": "Roger J. Campbell",
+  "name": "Roger",
+  "current_role": "AI / ML Consultant",
+  "location": "Birmingham, UK",
+  "email": "the_rfc@hotmail.co.uk",
+  "linkedin": "https://www.linkedin.com/in/roger-j-campbell-1a33771ab/",
+  "specialties": [
+    "Machine Learning (ML)",
+    "MLOps & LLMOps",
+    "Data Science",
+    "Machine Learning Engineering",
+    "Econometrics",
+    "Time Series Analysis",
+    "Predictive Modelling"
+  ],
+  "years_experience": 4,
+  "education": [
+    {
+      "degree": "MSc Data Science",
+      "institution": "University of St Andrews",
+      "year": "2024–Present"
+    },
+    {
+      "degree": "BSc (Hons) Mathematics",
+      "institution": "Open University",
+      "year": "2015–2023"
+    },
+    {
+      "degree": "MSc Economics",
+      "institution": "University of Birmingham",
+      "year": "2019–2021"
+    },
+    {
+      "degree": "BA (Hons) Politics, Philosophy & Economics",
+      "institution": "Open University",
+      "year": "2010–2014"
+    }
+  ]
+}

@@ -1,18 +1,25 @@
 """
-AI Digital Twin Backend API with Memory
+AI Digital Twin Backend API with Configurable Memory Storage
 
-This module sets up a FastAPI application that serves as the backend for the
-llmops-digital-twin project. It provides endpoints for:
+This module defines the FastAPI backend for the llmops-digital-twin project.
+It provides endpoints for:
 
 1. Health checks
-2. Basic root response
-3. Chat interactions with an AI model (with file-based conversation memory)
-4. Listing active conversation sessions
+2. Basic root response (with memory/storage status)
+3. Chat interactions with an AI model (with conversation memory)
+4. Retrieving full conversation history for a given session
 
-The API loads environment variables, configures CORS, integrates with the
-OpenAI client, and persists per-session conversation history in JSON files
-under the ../memory directory. Each session is identified by a session_id,
-which allows the Digital Twin to recall previous messages within that session.
+Key features:
+- CORS configuration for frontend–backend communication
+- Integration with the OpenAI Chat Completions API
+- Pluggable memory storage:
+    * Local JSON files under MEMORY_DIR
+    * Optional S3-based storage, controlled by environment variables
+- Rich system prompt construction using `context.prompt()`, which pulls in
+  structured facts, summary, style, and LinkedIn/CV content.
+
+Each conversation is keyed by a session_id, enabling the Digital Twin to recall
+past exchanges and maintain coherent, context-aware dialogue.
 """
 
 # ============================================================
@@ -25,18 +32,20 @@ from pydantic import BaseModel
 from openai import OpenAI
 import os
 from dotenv import load_dotenv
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 import json
 import uuid
-from datetime import datetime  # Currently unused, kept for potential future extension
-from pathlib import Path
+from datetime import datetime
+import boto3
+from botocore.exceptions import ClientError
+from context import prompt
 
 
 # ============================================================
 # Environment Variables
 # ============================================================
 
-# Load environment variables from .env (e.g. OPENAI_API_KEY, CORS_ORIGINS)
+# Load environment variables from .env (e.g. OPENAI_API_KEY, CORS_ORIGINS, USE_S3)
 load_dotenv(override=True)
 
 
@@ -52,16 +61,16 @@ app = FastAPI()
 # CORS Configuration
 # ============================================================
 
-# Read allowed origins from environment (defaults to local React/Next.js dev)
-origins = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
+# Read allowed origins from environment (defaults to local Next.js dev)
+origins: List[str] = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
 
-# Add CORS middleware to allow secure cross-origin requests
+# Add CORS middleware to allow cross-origin requests from the frontend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],   # Allow all HTTP methods
-    allow_headers=["*"],   # Allow all HTTP headers
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["*"],
 )
 
 
@@ -69,91 +78,26 @@ app.add_middleware(
 # OpenAI Client Initialisation
 # ============================================================
 
-# Create OpenAI client using API key loaded via environment variables
-client = OpenAI()
+# Initialise OpenAI client using explicit API key from environment
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
 # ============================================================
-# Memory Directory Configuration
+# Memory Storage Configuration
 # ============================================================
 
-# Define the directory used to store per-session conversation history
-MEMORY_DIR = Path("../memory")
+# Toggle between local file-based storage and S3-based storage
+USE_S3: bool = os.getenv("USE_S3", "false").lower() == "true"
 
-# Ensure the memory directory exists
-MEMORY_DIR.mkdir(exist_ok=True)
+# S3 bucket name used when USE_S3 is enabled
+S3_BUCKET: str = os.getenv("S3_BUCKET", "")
 
+# Local directory used when storing memory on disk
+MEMORY_DIR: str = os.getenv("MEMORY_DIR", "../memory")
 
-# ============================================================
-# Personality Loading
-# ============================================================
-
-def load_personality() -> str:
-    """
-    Load the personality text file used as a system message for the AI.
-
-    Returns
-    -------
-    str
-        The personality prompt content from the local file.
-    """
-    # Open the personality file and return its contents
-    with open("me.txt", "r", encoding="utf-8") as f:
-        return f.read().strip()
-
-
-# Load the personality at startup
-PERSONALITY = load_personality()
-
-
-# ============================================================
-# Memory Handling Functions
-# ============================================================
-
-def load_conversation(session_id: str) -> List[Dict]:
-    """
-    Load conversation history for a given session from disk.
-
-    Parameters
-    ----------
-    session_id : str
-        Unique identifier for the conversation session.
-
-    Returns
-    -------
-    List[Dict]
-        A list of message dictionaries representing the conversation history.
-        Each message dictionary contains 'role' and 'content' fields.
-    """
-    # Construct the file path for this session
-    file_path = MEMORY_DIR / f"{session_id}.json"
-
-    # If the file exists, load and return its contents
-    if file_path.exists():
-        with open(file_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-
-    # No existing conversation found, return an empty list
-    return []
-
-
-def save_conversation(session_id: str, messages: List[Dict]) -> None:
-    """
-    Persist the conversation history for a given session to disk.
-
-    Parameters
-    ----------
-    session_id : str
-        Unique identifier for the conversation session.
-    messages : List[Dict]
-        The full list of messages to write to the session file.
-    """
-    # Construct the file path for this session
-    file_path = MEMORY_DIR / f"{session_id}.json"
-
-    # Write the messages list to disk as formatted JSON
-    with open(file_path, "w", encoding="utf-8") as f:
-        json.dump(messages, f, indent=2, ensure_ascii=False)
+# Initialise S3 client if required
+if USE_S3:
+    s3_client = boto3.client("s3")
 
 
 # ============================================================
@@ -191,50 +135,164 @@ class ChatResponse(BaseModel):
     session_id: str
 
 
+class Message(BaseModel):
+    """
+    Model representing a single message in the conversation history.
+
+    Attributes
+    ----------
+    role : str
+        The role of the speaker ('user' or 'assistant').
+    content : str
+        The textual content of the message.
+    timestamp : str
+        ISO 8601 timestamp indicating when the message was created.
+    """
+    role: str
+    content: str
+    timestamp: str
+
+
+# ============================================================
+# Memory Management Helpers
+# ============================================================
+
+def get_memory_path(session_id: str) -> str:
+    """
+    Construct the storage key / file name for a given session.
+
+    Parameters
+    ----------
+    session_id : str
+        Unique identifier for the conversation session.
+
+    Returns
+    -------
+    str
+        The relative key or path for storing this session's memory.
+    """
+    return f"{session_id}.json"
+
+
+def load_conversation(session_id: str) -> List[Dict[str, Any]]:
+    """
+    Load conversation history for a given session from storage.
+
+    If S3 is enabled, the conversation is read from the configured S3 bucket.
+    Otherwise, it is loaded from the local filesystem under MEMORY_DIR.
+
+    Parameters
+    ----------
+    session_id : str
+        Unique identifier for the conversation session.
+
+    Returns
+    -------
+    List[Dict[str, Any]]
+        A list of message dictionaries representing the conversation history.
+        Each message dictionary contains 'role', 'content', and 'timestamp'.
+    """
+    if USE_S3:
+        try:
+            # Retrieve the object from S3
+            response = s3_client.get_object(
+                Bucket=S3_BUCKET,
+                Key=get_memory_path(session_id),
+            )
+            return json.loads(response["Body"].read().decode("utf-8"))
+        except ClientError as e:
+            # If the object is not found, return an empty history
+            if e.response["Error"]["Code"] == "NoSuchKey":
+                return []
+            # Propagate other S3-related errors
+            raise
+    else:
+        # Local file storage
+        file_path = os.path.join(MEMORY_DIR, get_memory_path(session_id))
+        if os.path.exists(file_path):
+            with open(file_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        return []
+
+
+def save_conversation(session_id: str, messages: List[Dict[str, Any]]) -> None:
+    """
+    Persist the conversation history for a given session to storage.
+
+    If S3 is enabled, the conversation is written to the configured S3 bucket.
+    Otherwise, it is saved as a JSON file in the local MEMORY_DIR.
+
+    Parameters
+    ----------
+    session_id : str
+        Unique identifier for the conversation session.
+    messages : List[Dict[str, Any]]
+        The full list of messages to write to storage.
+    """
+    if USE_S3:
+        # Store JSON-serialised conversation in S3
+        s3_client.put_object(
+            Bucket=S3_BUCKET,
+            Key=get_memory_path(session_id),
+            Body=json.dumps(messages, indent=2),
+            ContentType="application/json",
+        )
+    else:
+        # Local file storage
+        os.makedirs(MEMORY_DIR, exist_ok=True)
+        file_path = os.path.join(MEMORY_DIR, get_memory_path(session_id))
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(messages, f, indent=2)
+
+
 # ============================================================
 # API Routes
 # ============================================================
 
 @app.get("/")
-async def root():
+async def root() -> Dict[str, Any]:
     """
-    Root endpoint used to verify the API is running.
+    Root endpoint used to verify the API is running and memory configuration.
 
     Returns
     -------
     dict
-        A simple welcome message indicating memory support.
+        A dictionary containing a welcome message and storage configuration.
     """
-    return {"message": "AI Digital Twin API with Memory"}
+    return {
+        "message": "AI Digital Twin API",
+        "memory_enabled": True,
+        "storage": "S3" if USE_S3 else "local",
+    }
 
 
 @app.get("/health")
-async def health_check():
+async def health_check() -> Dict[str, Any]:
     """
     Health check endpoint for monitoring and readiness probes.
 
     Returns
     -------
     dict
-        A simple dictionary indicating service health.
+        A simple dictionary indicating service health and S3 usage.
     """
-    return {"status": "healthy"}
+    return {"status": "healthy", "use_s3": USE_S3}
 
 
 @app.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest):
+async def chat(request: ChatRequest) -> ChatResponse:
     """
     Handle chat interactions with the AI model, including session-based memory.
 
     This endpoint:
     - Generates or reuses a session_id
     - Loads previous conversation history for that session
-    - Constructs a message list including:
-        * system personality
-        * prior user and assistant messages
+    - Builds a messages list including:
+        * a system message constructed from `context.prompt()`
+        * prior user and assistant messages (last 10 for context)
         * the current user message
-    - Sends the combined context to the OpenAI API
-    - Stores the updated conversation history back to disk
+    - Sends the combined context to the OpenAI Chat Completions API
+    - Updates and saves the conversation history
 
     Parameters
     ----------
@@ -252,85 +310,88 @@ async def chat(request: ChatRequest):
         If an error occurs when generating the AI response.
     """
     try:
-        # Generate session ID if not provided by the client
-        session_id = request.session_id or str(uuid.uuid4())
+        # Generate a new session ID if not provided by the client
+        session_id: str = request.session_id or str(uuid.uuid4())
 
         # Load existing conversation history for this session
-        conversation = load_conversation(session_id)
+        conversation: List[Dict[str, Any]] = load_conversation(session_id)
 
-        # Start the message list with the system personality
-        messages = [{"role": "system", "content": PERSONALITY}]
+        # Build the message list starting with the system prompt
+        messages: List[Dict[str, str]] = [
+            {"role": "system", "content": prompt()}
+        ]
 
-        # Append prior conversation history to the messages list
-        for msg in conversation:
-            messages.append(msg)
+        # Append the last 10 messages from the conversation history for context
+        for msg in conversation[-10:]:
+            messages.append({"role": msg["role"], "content": msg["content"]})
 
-        # Add the current user message as the latest entry
+        # Add the current user message
         messages.append({"role": "user", "content": request.message})
 
-        # Call the OpenAI model to generate a chat completion
+        # Call the OpenAI Chat Completions API
         response = client.chat.completions.create(
             model="gpt-4o-mini",
-            messages=messages
+            messages=messages,
         )
 
-        # Extract the assistant's reply content
-        assistant_response = response.choices[0].message.content
+        # Extract the assistant's reply
+        assistant_response: str = response.choices[0].message.content
 
-        # Update conversation history with the new user and assistant messages
-        conversation.append({"role": "user", "content": request.message})
-        conversation.append({"role": "assistant", "content": assistant_response})
+        # Append the new user message to the conversation history
+        conversation.append(
+            {
+                "role": "user",
+                "content": request.message,
+                "timestamp": datetime.now().isoformat(),
+            }
+        )
 
-        # Persist the updated conversation history for this session
+        # Append the assistant's reply to the conversation history
+        conversation.append(
+            {
+                "role": "assistant",
+                "content": assistant_response,
+                "timestamp": datetime.now().isoformat(),
+            }
+        )
+
+        # Persist the updated conversation history
         save_conversation(session_id, conversation)
 
-        # Return the AI response and session ID to the client
-        return ChatResponse(
-            response=assistant_response,
-            session_id=session_id
-        )
+        # Return the structured response
+        return ChatResponse(response=assistant_response, session_id=session_id)
 
     except Exception as e:
-        # Raise FastAPI HTTP exception for any runtime error
+        # Log the error and surface a generic HTTP 500 to the client
+        print(f"Error in chat endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/sessions")
-async def list_sessions():
+@app.get("/conversation/{session_id}")
+async def get_conversation(session_id: str) -> Dict[str, Any]:
     """
-    List all conversation sessions that have been stored in the memory directory.
+    Retrieve the full conversation history for a given session.
+
+    Parameters
+    ----------
+    session_id : str
+        Unique identifier for the conversation session.
 
     Returns
     -------
     dict
-        A dictionary containing a list of sessions, where each session entry
-        includes:
-        - session_id : str
-            The unique session identifier
-        - message_count : int
-            Number of messages stored in the conversation
-        - last_message : Optional[str]
-            The content of the final message in the conversation, if any
+        A dictionary containing the session_id and its associated messages.
+
+    Raises
+    ------
+    HTTPException
+        If an error occurs while loading the conversation history.
     """
-    sessions = []
-
-    # Iterate over all JSON files in the memory directory
-    for file_path in MEMORY_DIR.glob("*.json"):
-        session_id = file_path.stem
-
-        # Load the conversation history for this session
-        with open(file_path, "r", encoding="utf-8") as f:
-            conversation = json.load(f)
-
-        # Build a summary entry for this session
-        sessions.append({
-            "session_id": session_id,
-            "message_count": len(conversation),
-            "last_message": conversation[-1]["content"] if conversation else None
-        })
-
-    # Return the list of sessions
-    return {"sessions": sessions}
+    try:
+        conversation: List[Dict[str, Any]] = load_conversation(session_id)
+        return {"session_id": session_id, "messages": conversation}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ============================================================
