@@ -1,44 +1,227 @@
-# 🧠 **Adding Memory to Your Digital Twin — Branch Overview**
+# 🚀 **Enhance the Digital Twin — Branch Overview**
 
-This branch upgrades the **llmops-digital-twin** backend to support **persistent conversational memory**. Your Digital Twin can now recall previous messages within a session, enabling natural, context-aware dialogue. Memory is stored as JSON files in the `/memory` directory, allowing each session to maintain its own conversation history.
+This branch enriches the **llmops-digital-twin** backend and frontend by adding a **personal data layer**, a **dynamic contextual system prompt**, **AWS-ready memory persistence**, and optional **Markdown rendering** for more natural, expressive responses.
 
-## Part 1: update the backend with memory support
+It also prepares the backend for **AWS Lambda deployment** in the next stage.
 
-### Step 1: Replace `server.py` with the memory-enabled version
+A full demo is shown below:
 
-In this branch, the backend is enhanced to include:
+<p align="center">
+  <img src="../img/demo/twin_demo.gif" width="100%" />
+</p>
 
-* a per-session memory system
-* JSON storage under `../memory/`
-* automatic session creation
-* loading previous messages before each new request
-* storing updated conversations after each assistant reply
-* a `/sessions` endpoint for inspecting all active sessions
 
-Replace your existing `backend/server.py` with the new memory-enabled version provided for this branch.
 
-This update allows your Digital Twin to remember user-provided details (such as their name, preferences, or project details) across multiple messages within the same session.
+## Part 1: Add Personal Data for the Twin
 
-## Part 2: restart the backend server
+### Step 1: Create the Data Directory
 
-After replacing `server.py`, restart the backend:
+Inside the **backend** folder:
+
+```bash
+cd backend
+mkdir data
+```
+
+Your directory now includes a dedicated space for structured personal information used to enrich the Digital Twin’s context.
+
+### Step 2: Add Personal Data Files
+
+Inside `backend/data/`, create:
+
+**1. `facts.json`** — structured persona information
+**2. `summary.txt`** — your professional summary
+**3. `style.txt`** — communication guidelines
+**4. `linkedin.pdf`** — exported or printed PDF of your LinkedIn profile
+
+These files are consumed by the backend to build a natural and accurate representation of your identity.
+
+Example (truncated):
+
+```json
+{
+  "full_name": "Roger J. Campbell",
+  "name": "Roger",
+  "current_role": "AI / ML Consultant",
+  "location": "Birmingham, UK",
+  "specialties": ["Machine Learning", "LLMOps", "..."]
+}
+```
+
+Summary and style files contain short descriptive text blocks defining your tone and background.
+
+
+
+## Part 2: Create the `resources.py` Module
+
+This module loads all persona-related data files and makes them available to the rest of the backend.
+
+Truncated example:
+
+```python
+reader = PdfReader("./data/linkedin.pdf")
+linkedin = ...
+summary = open("./data/summary.txt").read()
+style = open("./data/style.txt").read()
+facts = json.load(open("./data/facts.json"))
+```
+
+This provides a clean, centralised data ingestion layer.
+
+
+
+## Part 3: Build the Dynamic Context System
+
+Create `backend/context.py`.
+
+This file constructs the **system prompt** sent to the LLM each time the Digital Twin responds.
+
+It uses:
+
+* `facts.json`
+* `summary.txt`
+* `style.txt`
+* extracted `linkedin.pdf` text
+* current time
+* safety and behavioural rules
+* Markdown-friendly formatting
+
+Truncated:
+
+```python
+def prompt():
+    return f"""
+# Your Role
+
+You are a digital twin of {full_name}, also known as {name}.
+...
+Here are notes about communication style:
+{style}
+"""
+```
+
+This enables rich, natural, personalised responses.
+
+
+
+## Part 4: Update Dependencies
+
+Append to `backend/requirements.txt`:
+
+```
+boto3
+pypdf
+mangum
+```
+
+These support:
+
+* S3-based memory persistence
+* PDF text extraction
+* AWS Lambda execution
+
+Update your environment:
+
+```bash
+cd backend
+uv add -r requirements.txt
+```
+
+
+
+## Part 5: Upgrade the Backend to Support Memory + AWS
+
+Replace `server.py` with the AWS-ready version.
+
+Enhancements include:
+
+* local or S3 memory storage
+* improved conversation trimming
+* context-aware system prompt injection
+* structured request/response models
+* AWS-compatible CORS
+* safe error handling
+
+Truncated:
+
+```python
+USE_S3 = os.getenv("USE_S3") == "true"
+messages = [{"role": "system", "content": prompt()}]
+...
+save_conversation(session_id, conversation)
+```
+
+
+
+## Part 6: Add the AWS Lambda Handler
+
+Create `backend/lambda_handler.py`:
+
+```python
+from mangum import Mangum
+from server import app
+handler = Mangum(app)
+```
+
+This enables seamless deployment to AWS Lambda + API Gateway.
+
+
+
+## Part 7: Enable Markdown Rendering in the Frontend
+
+To allow the twin to use **bold**, **lists**, **headings**, etc., the frontend was upgraded with:
+
+```bash
+npm install react-markdown remark-gfm remark-breaks
+```
+
+### Twin component update (`components/twin.tsx`)
+
+Assistant messages now render Markdown safely:
+
+```tsx
+<Markdown
+  className="markdown-content prose prose-slate max-w-none"
+  remarkPlugins={[remarkGfm, remarkBreaks]}
+>
+  {message.content}
+</Markdown>
+```
+
+User messages still render as plain text.
+
+### Global CSS update (`app/globals.css`)
+
+Clean Markdown styling via Tailwind Typography:
+
+```css
+@import "tailwindcss";
+@import "@tailwindcss/typography";
+
+.markdown-content {
+  @apply prose prose-slate max-w-none;
+}
+```
+
+This ensures professional, readable formatting.
+
+
+
+## Part 8: Test Locally
+
+### Backend:
 
 ```bash
 cd backend
 uv run uvicorn server:app --reload
 ```
 
-You should see the usual FastAPI startup logs indicating that the server is running on:
+### Frontend:
 
+```bash
+cd frontend
+npm run dev
 ```
-http://127.0.0.1:8000
-```
-
-The backend is now ready to support full memory-based conversations.
-
-## Part 3: test memory persistence in your Digital Twin
-
-### Step 1: Open the app
 
 Visit:
 
@@ -46,59 +229,10 @@ Visit:
 http://localhost:3000
 ```
 
-### Step 2: Have a memory test conversation
+Your Digital Twin now:
 
-Try the following messages:
-
-1. **you:** “Hi! My name is Fred and I love Python.”
-2. **twin:** responds with greeting and acknowledges your preferences
-3. **you:** “What’s my name and what do I love?”
-4. **twin:** correctly remembers:
-
-   * your name is Fred
-   * you love Python
-
-Your interface should look similar to:
-
-<img src="img/testing/chat_remember.png" width="100%" />
-
-### Step 3: Inspect the memory files
-
-Open a terminal and check the memory directory:
-
-```bash
-ls ../memory/
-```
-
-You will see files such as:
-
-```
-c12a55d8-8f23-41af-a81f-fbb3b6f6ed3e.json
-```
-
-Each file represents one session and contains the full conversation history:
-
-```json
-[
-  {
-    "role": "user",
-    "content": "Hi! My name is Fred and I love Python"
-  },
-  {
-    "role": "assistant",
-    "content": "Hi, Fred! It's great to meet you..."
-  },
-  {
-    "role": "user",
-    "content": "What's my name and what do I love?"
-  },
-  {
-    "role": "assistant",
-    "content": "You mentioned that your name is Fred and you love Python..."
-  }
-]
-```
-
-This JSON file-based memory system now enables your Digital Twin to maintain session context and support natural multi-turn conversations.
-
-Your backend now fully supports memory, completing a major milestone in developing your Digital Twin.
+* remembers conversation history
+* uses rich persona context
+* renders Markdown beautifully
+* is AWS Lambda ready
+* is S3-compatible for production memory

@@ -3,6 +3,9 @@
 import type React from 'react';
 import { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkBreaks from 'remark-breaks';
 
 /**
  * Shape of a single chat message exchanged between the user
@@ -11,7 +14,7 @@ import { Send, Bot, User } from 'lucide-react';
 interface Message {
     id: string;                    // Unique identifier for the message (used as React key)
     role: 'user' | 'assistant';    // Message author role
-    content: string;               // Text content of the message
+    content: string;               // Text content of the message (may include Markdown)
     timestamp: Date;               // Timestamp when the message was created
 }
 
@@ -24,9 +27,10 @@ interface Message {
  * - Displays responses from the AI Digital Twin
  * - Shows a typing/loading indicator while awaiting responses
  *
- * Note:
- * The backend currently operates without memory, but a `sessionId` is
- * maintained so that future extensions can associate requests with a session.
+ * Notes:
+ * - The backend maintains conversational memory via a session ID.
+ * - Assistant responses may include light Markdown (headings, lists, bold, etc.),
+ *   which is rendered using `react-markdown` with GitHub-flavoured Markdown support.
  */
 export default function Twin() {
     // Store the ordered list of messages in the conversation
@@ -106,7 +110,7 @@ export default function Twin() {
             const assistantMessage: Message = {
                 id: (Date.now() + 1).toString(),
                 role: 'assistant',
-                content: data.response,
+                content: data.response, // May contain Markdown
                 timestamp: new Date(),
             };
 
@@ -135,7 +139,7 @@ export default function Twin() {
      * Handle key press events in the input field.
      * Pressing Enter (without Shift) sends the message.
      */
-    const handleKeyPress = (e: React.KeyboardEvent) => {
+    const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
         // If Enter is pressed without Shift, prevent newline and send the message
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
@@ -191,8 +195,23 @@ export default function Twin() {
                                     : 'bg-white border border-gray-200 text-gray-800'
                             }`}
                         >
-                            {/* Message content */}
-                            <p className="whitespace-pre-wrap">{message.content}</p>
+                            {/* Message content:
+                               - Assistant: Markdown-rendered
+                               - User: plain text (preserved line breaks) */}
+                            {message.role === 'assistant' ? (
+                                <div className="markdown-content prose prose-slate max-w-none">
+                                    <ReactMarkdown
+                                        remarkPlugins={[remarkGfm, remarkBreaks]}
+                                    >
+                                        {message.content}
+                                    </ReactMarkdown>
+                                </div>
+                            ) : (
+                                <p className="whitespace-pre-wrap">
+                                    {message.content}
+                                </p>
+                            )}
+
                             {/* Timestamp below each message */}
                             <p
                                 className={`text-xs mt-1 ${
