@@ -84,7 +84,7 @@ export default function Twin() {
 
         try {
             // Send the chat request to the backend API
-            const response = await fetch('http://localhost:8000/chat', {
+            const response = await fetch('https://d3oospovxe.execute-api.eu-west-2.amazonaws.com/chat', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
