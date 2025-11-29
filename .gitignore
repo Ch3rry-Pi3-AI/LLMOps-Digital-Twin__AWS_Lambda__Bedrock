@@ -58,3 +58,5 @@ tests/
 # -------------------------------------------------------------------
 tmp/
 gcp-key.json
+lambda-deployment.zip
+lambda-package/

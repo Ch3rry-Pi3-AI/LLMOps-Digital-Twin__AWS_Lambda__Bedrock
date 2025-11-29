@@ -1,238 +1,92 @@
-# 🚀 **Enhance the Digital Twin — Branch Overview**
+# 🛠️ **AWS Environment Setup — Branch Overview**
 
-This branch enriches the **llmops-digital-twin** backend and frontend by adding a **personal data layer**, a **dynamic contextual system prompt**, **AWS-ready memory persistence**, and optional **Markdown rendering** for more natural, expressive responses.
-
-It also prepares the backend for **AWS Lambda deployment** in the next stage.
-
-A full demo is shown below:
-
-<p align="center">
-  <img src="img/demo/twin_demo.gif" width="100%" />
-</p>
+This branch prepares the **initial AWS environment** required for deploying the **llmops-digital-twin** backend and its future serverless components (Lambda, API Gateway, S3, CloudFront, DynamoDB).
+The focus is on configuring AWS credentials, creating the correct IAM user/group structure, and ensuring your project root contains the environment variables needed for deployment.
 
 
 
-## Part 1: Add Personal Data for the Twin
+## Part 1: Project Environment Configuration
 
-### Step 1: Create the Data Directory
+### **Step 1: Create a `.env` File in the Project Root**
 
-Inside the **backend** folder:
+Inside the root of your project (`twin/.env`), create the following file:
 
 ```bash
-cd backend
-mkdir data
+# AWS Configuration
+AWS_ACCOUNT_ID=your_aws_account_id
+DEFAULT_AWS_REGION=us-east-1
+
+# OpenAI Configuration
+OPENAI_API_KEY=your_openai_api_key
+
+# Project Configuration
+PROJECT_NAME=twin
 ```
 
-Your directory now includes a dedicated space for structured personal information used to enrich the Digital Twin’s context.
+Replace:
 
-### Step 2: Add Personal Data Files
+* **your_aws_account_id** → your *12-digit* AWS account number
+* **your_openai_api_key** → your actual OpenAI API key
 
-Inside `backend/data/`, create:
+This `.env` file will later be used by deployment scripts and AWS CLI for building Lambda packages and configuring infrastructure.
 
-**1. `facts.json`** — structured persona information
-**2. `summary.txt`** — your professional summary
-**3. `style.txt`** — communication guidelines
-**4. `linkedin.pdf`** — exported or printed PDF of your LinkedIn profile
 
-These files are consumed by the backend to build a natural and accurate representation of your identity.
 
-Example (truncated):
+## Part 2: Configure AWS Console Access
 
-```json
-{
-  "full_name": "Roger J. Campbell",
-  "name": "Roger",
-  "current_role": "AI / ML Consultant",
-  "location": "Birmingham, UK",
-  "specialties": ["Machine Learning", "LLMOps", "..."]
-}
-```
+### **Step 2: Sign In to the AWS Console**
 
-Summary and style files contain short descriptive text blocks defining your tone and background.
+1. Visit **aws.amazon.com**
+2. Sign in as **root user**
+   (This is only needed for initial setup—afterwards you will switch to IAM user-only access.)
 
 
 
-## Part 2: Create the `resources.py` Module
+## Part 3: Create IAM Group and Permissions
 
-This module loads all persona-related data files and makes them available to the rest of the backend.
+### **Step 3: Create the IAM User Group**
 
-Truncated example:
+1. In the AWS Console, go to **IAM**
+2. Navigate to **User groups**
+3. Select **Create group**
+4. Name it: **TwinAccess**
+5. Attach the following AWS managed policies:
 
-```python
-reader = PdfReader("./data/linkedin.pdf")
-linkedin = ...
-summary = open("./data/summary.txt").read()
-style = open("./data/style.txt").read()
-facts = json.load(open("./data/facts.json"))
-```
+| Policy                          | Purpose                                             |
+| ------------------------------- | --------------------------------------------------- |
+| `AWSLambda_FullAccess`          | Deploy & manage Lambda functions                    |
+| `AmazonS3FullAccess`            | S3 buckets + object storage for memory or artifacts |
+| `AmazonAPIGatewayAdministrator` | Create & manage REST APIs for your Lambda           |
+| `CloudFrontFullAccess`          | Prepare for optional frontend CDN deployment        |
+| `IAMReadOnlyAccess`             | Allows viewing roles required by other services     |
+| `AmazonDynamoDBFullAccess_v2`   | Required for Day 4 enhancements                     |
 
-This provides a clean, centralised data ingestion layer.
+6. Click **Create group**
 
+This group now contains all permissions the Digital Twin project will require across upcoming branches.
 
 
-## Part 3: Build the Dynamic Context System
+## Part 4: Add IAM User to the Group
 
-Create `backend/context.py`.
+### **Step 4: Add Your Existing IAM User**
 
-This file constructs the **system prompt** sent to the LLM each time the Digital Twin responds.
+1. In **IAM → Users**, select your Week 1 user: **`aiengineer`**
+2. Click **Add to groups**
+3. Select the `TwinAccess` group
+4. Confirm by clicking **Add to groups**
 
-It uses:
+Your IAM user now has all needed permissions for serverless deployment.
 
-* `facts.json`
-* `summary.txt`
-* `style.txt`
-* extracted `linkedin.pdf` text
-* current time
-* safety and behavioural rules
-* Markdown-friendly formatting
 
-Truncated:
 
-```python
-def prompt():
-    return f"""
-# Your Role
+## Part 5: Switch to IAM-Only Sign-In
 
-You are a digital twin of {full_name}, also known as {name}.
-...
-Here are notes about communication style:
-{style}
-"""
-```
+### **Step 5: Sign In as IAM User**
 
-This enables rich, natural, personalised responses.
+1. Log out of the root account
+2. Sign in again, this time as:
 
+* **Username:** `aiengineer`
+* **Password:** (your IAM user password)
 
-
-## Part 4: Update Dependencies
-
-Append to `backend/requirements.txt`:
-
-```
-boto3
-pypdf
-mangum
-```
-
-These support:
-
-* S3-based memory persistence
-* PDF text extraction
-* AWS Lambda execution
-
-Update your environment:
-
-```bash
-cd backend
-uv add -r requirements.txt
-```
-
-
-
-## Part 5: Upgrade the Backend to Support Memory + AWS
-
-Replace `server.py` with the AWS-ready version.
-
-Enhancements include:
-
-* local or S3 memory storage
-* improved conversation trimming
-* context-aware system prompt injection
-* structured request/response models
-* AWS-compatible CORS
-* safe error handling
-
-Truncated:
-
-```python
-USE_S3 = os.getenv("USE_S3") == "true"
-messages = [{"role": "system", "content": prompt()}]
-...
-save_conversation(session_id, conversation)
-```
-
-
-
-## Part 6: Add the AWS Lambda Handler
-
-Create `backend/lambda_handler.py`:
-
-```python
-from mangum import Mangum
-from server import app
-handler = Mangum(app)
-```
-
-This enables seamless deployment to AWS Lambda + API Gateway.
-
-
-
-## Part 7: Enable Markdown Rendering in the Frontend
-
-To allow the twin to use **bold**, **lists**, **headings**, etc., the frontend was upgraded with:
-
-```bash
-npm install react-markdown remark-gfm remark-breaks
-```
-
-### Twin component update (`components/twin.tsx`)
-
-Assistant messages now render Markdown safely:
-
-```tsx
-<Markdown
-  className="markdown-content prose prose-slate max-w-none"
-  remarkPlugins={[remarkGfm, remarkBreaks]}
->
-  {message.content}
-</Markdown>
-```
-
-User messages still render as plain text.
-
-### Global CSS update (`app/globals.css`)
-
-Clean Markdown styling via Tailwind Typography:
-
-```css
-@import "tailwindcss";
-@import "@tailwindcss/typography";
-
-.markdown-content {
-  @apply prose prose-slate max-w-none;
-}
-```
-
-This ensures professional, readable formatting.
-
-
-
-## Part 8: Test Locally
-
-### Backend:
-
-```bash
-cd backend
-uv run uvicorn server:app --reload
-```
-
-### Frontend:
-
-```bash
-cd frontend
-npm run dev
-```
-
-Visit:
-
-```
-http://localhost:3000
-```
-
-Your Digital Twin now:
-
-* remembers conversation history
-* uses rich persona context
-* renders Markdown beautifully
-* is AWS Lambda ready
-* is S3-compatible for production memory
+From this point forward, *all AWS project work should be done under the IAM user*, keeping your root credentials secure.
