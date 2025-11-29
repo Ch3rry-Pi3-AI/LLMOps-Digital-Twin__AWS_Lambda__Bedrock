@@ -100,8 +100,3 @@ Included files:
 * `LinkedIn.pdf` → full CV-derived text used to enrich the model context
 
 These files allow your Digital Twin to accurately reflect your background, skills, tone, and professional identity.
-
-### **8. `me.txt`**
-
-This older file remains for compatibility, though the new system uses the richer dataset inside `/data`.
-`server.py` still supports it for basic system prompts, but advanced behaviour comes from `context.py`.
