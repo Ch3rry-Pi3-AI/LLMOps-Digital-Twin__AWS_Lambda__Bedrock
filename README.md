@@ -1,114 +1,71 @@
-# 🌐 Set Up API Gateway
+# 🎨 Build and Deploy Frontend
 
-## Step 1: Create HTTP API with Integration
+This branch covers wiring your Digital Twin UI to the API Gateway endpoint, exporting the Next.js app as static files, and deploying the frontend to your S3 static site bucket.
 
-1. In AWS Console, search for **API Gateway**
-2. Click **Create API**
-3. Choose **HTTP API** → **Build**
-4. **Step 1 – Create and configure integrations:**
+## Step 1: Update Frontend API URL
 
-   * Click **Add integration**
-   * Integration type: **Lambda**
-   * Lambda function: select `twin-api`
-   * API name: `twin-api-gateway`
-   * Click **Next**
+Update `frontend/components/twin.tsx` – find the `fetch` call and change it from the local backend to your API Gateway URL:
 
-## Step 2: Configure Routes
+```typescript
+// Replace this line:
+const response = await fetch('http://localhost:8000/chat', {
 
-1. **Step 2 – Configure routes**
-2. A default route already exists. Update it and add the rest:
-
-**Existing Route (update this one):**
-
-* Method: `ANY`
-* Resource path: `/{proxy+}`
-* Integration target: `twin-api`
-
-**Add the following additional routes:**
-Route 1:
-
-* Method: `GET`
-* Resource path: `/`
-* Integration target: `twin-api`
-
-Route 2:
-
-* Method: `GET`
-* Resource path: `/health`
-* Integration target: `twin-api`
-
-Route 3:
-
-* Method: `POST`
-* Resource path: `/chat`
-* Integration target: `twin-api`
-
-Route 4 (CORS preflight):
-
-* Method: `OPTIONS`
-* Resource path: `/{proxy+}`
-* Integration target: `twin-api`
-
-<img src="img/aws_lambda/route_config.png" width="100%">
-
-3. Click **Next**
-
-## Step 3: Configure Stages
-
-1. **Step 3 – Configure stages:**
-
-   * Stage name: `$default`
-   * Auto-deploy: enabled
-2. Click **Next**
-
-## Step 4: Review and Create
-
-1. **Step 4 – Review and create:**
-
-   * Review your Lambda integration and all routes
-2. Click **Create**
-
-## Step 5: Configure CORS
-
-1. In the left menu, click **CORS**
-2. Click **Configure**
-3. Enter the following:
-
-* Access-Control-Allow-Origin: type `*` → **click Add**
-* Access-Control-Allow-Headers: type `*` → **click Add**
-* Access-Control-Allow-Methods: type `*` → **click Add**
-* Access-Control-Max-Age: `300`
-
-<img src="img/aws_lambda/cors_config.png" width="100%">
-
-4. Click **Save**
-
-**Important:** For every CORS field, you must **type**, then **click Add**, or your values will not be saved.
-
-## Step 6: Test Your API
-
-1. Go to **API details** or **Stages → $default**
-
-<img src="img/aws_lambda/default_endpoint.png" width="100%">
-
-2. Copy your **Invoke URL**
-3. Test your health check endpoint:
-
-Visit:
-
-```
-https://YOUR-API-ID.execute-api.us-east-1.amazonaws.com/health
+// With your API Gateway URL:
+const response = await fetch('https://YOUR-API-ID.execute-api.us-east-1.amazonaws.com/chat', {
 ```
 
-You should see:
+Make sure you keep the `/chat` path at the end of the URL.
 
-```
-{"status": "healthy", "use_s3": true}
+## Step 2: Configure for Static Export
+
+Update `frontend/next.config.ts` to enable static export:
+
+```typescript
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  output: 'export',
+  images: {
+    unoptimized: true
+  }
+};
+
+export default nextConfig;
 ```
 
-**Note:**
-If you see **Missing Authentication Token**, make sure you are calling the full path:
+This tells Next.js to generate a static export suitable for hosting on S3.
 
+## Step 3: Build Static Export
+
+From the `frontend` folder, run:
+
+```bash
+cd frontend
+npm run build
 ```
-/health
+
+This will create an `out` directory containing your static site.
+
+**Note:** With Next.js 15.5 and the App Router, you must set `output: 'export'` in `next.config.ts` for the `out` directory to be generated.
+
+## Step 4: Upload to S3
+
+Use the AWS CLI to sync the static export to your frontend S3 bucket:
+
+```bash
+cd frontend
+aws s3 sync out/ s3://YOUR-FRONTEND-BUCKET-NAME/ --delete
 ```
+
+The `--delete` flag ensures old files that are no longer part of the latest build are removed from the bucket.
+
+## Step 5: Test Your Static Site
+
+1. In the AWS Console, go to your S3 **frontend bucket**
+2. Open the **Properties** tab → **Static website hosting**
+3. Click the **Bucket website endpoint** URL
+
+Your Digital Twin should now load from S3 and call your Lambda-backed API Gateway endpoint.
+
+<img src="img/demo/twin_demo.gif" width="100%">
+
