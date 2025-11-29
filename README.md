@@ -1,77 +1,114 @@
-# 🪣 Create S3 Buckets
+# 🌐 Set Up API Gateway
 
-## Step 1: Create Memory Bucket
+## Step 1: Create HTTP API with Integration
 
-1. In AWS Console, search for **S3**
-2. Click **Create bucket**
-3. Configuration:
+1. In AWS Console, search for **API Gateway**
+2. Click **Create API**
+3. Choose **HTTP API** → **Build**
+4. **Step 1 – Create and configure integrations:**
 
-   * Bucket name: `twin-memory-[random-suffix]` (must be globally unique)
-   * Region: same as your Lambda (e.g., `us-east-1`)
-   * Leave all other settings as default
-4. Click **Create bucket**
-5. Copy the exact bucket name
+   * Click **Add integration**
+   * Integration type: **Lambda**
+   * Lambda function: select `twin-api`
+   * API name: `twin-api-gateway`
+   * Click **Next**
 
-## Step 2: Update Lambda Environment
+## Step 2: Configure Routes
 
-1. Go back to **Lambda** → **Configuration** → **Environment variables**
-2. Update `S3_BUCKET` with your bucket name
-3. Click **Save**
+1. **Step 2 – Configure routes**
+2. A default route already exists. Update it and add the rest:
 
-## Step 3: Add S3 Permissions to Lambda
+**Existing Route (update this one):**
 
-1. In **Lambda** → **Configuration** → **Permissions**
-2. Click the execution role name
-3. Click **Add permissions** → **Attach policies**
-4. Search for and select **AmazonS3FullAccess**
-5. Click **Attach policies**
+* Method: `ANY`
+* Resource path: `/{proxy+}`
+* Integration target: `twin-api`
 
-## Step 4: Create Frontend Bucket
+**Add the following additional routes:**
+Route 1:
 
-1. In S3, click **Create bucket**
-2. Configuration:
+* Method: `GET`
+* Resource path: `/`
+* Integration target: `twin-api`
 
-   * Bucket name: `twin-frontend-[random-suffix]`
-   * Region: same as Lambda
-   * **Uncheck** “Block all public access”
-   * Check the acknowledgment box
-3. Click **Create bucket**
+Route 2:
 
-## Step 5: Enable Static Website Hosting
+* Method: `GET`
+* Resource path: `/health`
+* Integration target: `twin-api`
 
-1. Click your frontend bucket
-2. Go to the **Properties** tab
-3. Scroll to **Static website hosting** → **Edit**
-4. Enable static website hosting:
+Route 3:
 
-   * Hosting type: **Host a static website**
-   * Index document: `index.html`
-   * Error document: `404.html`
-5. Click **Save changes**
+* Method: `POST`
+* Resource path: `/chat`
+* Integration target: `twin-api`
 
-<img src="img/aws_lambda/static_hosting.png" width="100%">
+Route 4 (CORS preflight):
 
-6. Copy the **Bucket website endpoint** shown at the top of that section
+* Method: `OPTIONS`
+* Resource path: `/{proxy+}`
+* Integration target: `twin-api`
 
-## Step 6: Configure Bucket Policy
+<img src="img/aws_lambda/route_config.png" width="100%">
 
-1. Go to the **Permissions** tab
-2. Under **Bucket policy**, click **Edit**
-3. Add this policy (replace `YOUR-BUCKET-NAME`):
+3. Click **Next**
 
-```json
-{
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Sid": "PublicReadGetObject",
-            "Effect": "Allow",
-            "Principal": "*",
-            "Action": "s3:GetObject",
-            "Resource": "arn:aws:s3:::YOUR-BUCKET-NAME/*"
-        }
-    ]
-}
+## Step 3: Configure Stages
+
+1. **Step 3 – Configure stages:**
+
+   * Stage name: `$default`
+   * Auto-deploy: enabled
+2. Click **Next**
+
+## Step 4: Review and Create
+
+1. **Step 4 – Review and create:**
+
+   * Review your Lambda integration and all routes
+2. Click **Create**
+
+## Step 5: Configure CORS
+
+1. In the left menu, click **CORS**
+2. Click **Configure**
+3. Enter the following:
+
+* Access-Control-Allow-Origin: type `*` → **click Add**
+* Access-Control-Allow-Headers: type `*` → **click Add**
+* Access-Control-Allow-Methods: type `*` → **click Add**
+* Access-Control-Max-Age: `300`
+
+<img src="img/aws_lambda/cors_config.png" width="100%">
+
+4. Click **Save**
+
+**Important:** For every CORS field, you must **type**, then **click Add**, or your values will not be saved.
+
+## Step 6: Test Your API
+
+1. Go to **API details** or **Stages → $default**
+
+<img src="img/aws_lambda/default_endpoint.png" width="100%">
+
+2. Copy your **Invoke URL**
+3. Test your health check endpoint:
+
+Visit:
+
+```
+https://YOUR-API-ID.execute-api.us-east-1.amazonaws.com/health
 ```
 
-4. Click **Save changes**
+You should see:
+
+```
+{"status": "healthy", "use_s3": true}
+```
+
+**Note:**
+If you see **Missing Authentication Token**, make sure you are calling the full path:
+
+```
+/health
+```
